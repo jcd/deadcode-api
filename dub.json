@@ -1,0 +1,14 @@
+{
+	"name": "deadcode-api",
+	"description": "Extension API library used for the deadcode editor.",
+	"authors": ["Jonas Drewsen"],
+	"homepage": "http://deadcode.steamwinter.com",
+	"license": "Boost v1",
+    "targetType": "library",
+    "sourcePaths": [ "." ],
+    "importPaths": [ "." ],
+	"dependencies": {
+		"deadcode-rpc": ">=0.0.0",
+		"poodinis": "~>6.2.0",
+	}
+}
