@@ -3,7 +3,7 @@ d:
  - dmd
  - ldc
 script:
- - N=0; while : ; do M=`find . -not -regex .*\.dub/dub.json -a -name dub.json | while read F; do cat $F | perl -ne 'print if s/.*\"(deadcode-.*)\"\s*?:.*/\1/' ; done | sort | uniq | tee deps.txt | wc -l`; echo "$N $M"; [[ $N -eq $M ]] && break; N=$M; cat deps.txt | while read X; do git clone https://github.com/jcd/$X.git $N ; dub add-local $X ; done; done
+ - perl -e "$X=0; do { $M=`find . -not -regex .*\.dub/dub.json -a -name dub.json | while read F; do cat $F | perl -ne 'print if s/.*\"(deadcode-.*)\"\s*?:.*/\1/' ; done | sort | uniq | tee deps.txt | wc -l`; print "$X $M\n"; break if $X == scalar($M); $X=scalar($X); `cat deps.txt | while read O; do git clone https://github.com/jcd/$O.git $O ; dub add-local $O; done` }"
  - dub test -b unittest-cov --compiler=${DC}
 after_success:
  - bash <(curl -s https://codecov.io/bash)
