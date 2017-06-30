@@ -1,6 +1,6 @@
-module deadcode.client.rpcclient;
+module deadcode.api.rpcclient;
 
-import deadcode.api : IApplication, CommandParameter;
+import deadcode.api : IApplication, CommandParameter, deadcodeListenPort;
 import deadcode.core.command : CommandManager;
 import poodinis : DependencyContainer, existingInstance;
 
@@ -38,9 +38,6 @@ template rpcClient()
     }
 }
 
-/// Default listening port for deadcode editor
-enum defaultPort = 13575;
-
 class _dummy
 {
     static int runRpcClient(string[] args, void function(shared DependencyContainer) initializeFunction = null)
@@ -53,7 +50,7 @@ class _dummy
         registerCommandParameterMsgPackHandlers();
 
         string ip = "127.0.0.1";
-        ushort port = defaultPort;
+        ushort port = deadcodeListenPort;
         
         if (args.length > 1)
             ip = args[1];
@@ -71,11 +68,11 @@ class _dummy
             import deadcode.api.commandautoregister : initCommands, finiCommands;
             import deadcode.core.log;
 
-            auto app = rpc.createReference!IApplication("0");
-            auto remoteLog = rpc.createReference!ILog("1");
-            auto commandManager = rpc.createReference!ICommandManager("2");
+            auto app = rpc.createReference!IApplication();
+            auto remoteLog = cast(RPCProxy!ILog)app.log;
+            auto commandManager = cast(RPCProxy!ICommandManager)app.commandManager;
 
-            context.register!(IApplication,typeof(app)).existingInstance(app);
+            context.register!(IApplication, typeof(app)).existingInstance(app);
             context.register!(ILog, typeof(remoteLog)).existingInstance(remoteLog);
             context.register!(ICommandManager, typeof(commandManager)).existingInstance(commandManager);
             context.register!RPC.existingInstance(rpc);
@@ -97,8 +94,9 @@ class _dummy
                 else
                 {
                     remoteLog.verbose("Register command in deadcode %s", c.command.name);
-                    auto service = rpc.publish!(ICommand)(c.command, c.command.name);
-                    commandManager.add(service);
+                    app.addCommand(c.command);
+                    //auto service = rpc.publish!(ICommand)(c.command, c.command.name);
+                    //commandManager.add(service);
                 }
 
                 // c.initialize();
@@ -113,14 +111,23 @@ class _dummy
             if (initializeFunction !is null)
                 initializeFunction(context);
 
-            rpc.kill();
+            // rpc.kill();
 
-            //finiCommands(localCommandManager);
+            finiCommands(cmds);
         });
         
         writeln("Connecting to " ~ ip ~ ":" ~ port.to!string);
-        
-        loop.connect(ip, port);
+
+        import std.socket;
+        try
+            loop.connect(ip, port);
+        catch (SocketOSException e)
+        {
+            writeln("Error connecting to editor:");
+            writeln(e);
+            return 2;
+        }
+
         
         while (loop.select() != 0) {}
 
@@ -142,25 +149,45 @@ unittest
     import std.concurrency;
     import std.stdio;
 
+    enum testPort = 17654;
+
     enum userDataDir = "The user data dir from server";
 
     static class TestApplication : IApplication
     {
-        IBufferView previousBuffer() { assert(0); }
+        ILog _log;
+        ICommandManager _commandManager;
+
+        void logMessage(LogLevel level, string message) { assert(0); }
         void setLogFile(string path)  { assert(0); }
         void bufferViewParamTest(IBufferView b) { assert(0); }
-        void addCommand(ICommand c) { assert(0); }
+        void addCommand(ICommand c) { _commandManager.add(c); }
+        string[] findCommands(string pattern) { assert(0); }
+        void runCommand(string commanName) { assert(0); }
+        void scheduleCommand(string commanName) { assert(0); }
         // void addMenuItem(string commandName, MenuItem menuItem);
         // void addCommandShortcuts(string commandName, Shortcut[] shortcuts);
         void onFileDropped(string path) { assert(0); }
         void quit() { assert(0); }
         string hello(string yourName) { assert(0); }
-        ITextEditor getCurrentTextEditor() { assert(0); }
-        IBufferView getCurrentBuffer() { assert(0); }
+
         void startExtension(string path) { assert(0); }
         void scheduleCommand(string commandName, string arg1) { assert(0); }
-        string getUserDataDir() { return userDataDir; }
-        string getExecutableDir() { assert(0); }
+       
+        void buildExtension(string name) { assert(0); }
+        void loadExtension(string name) { assert(0); }
+        void unloadExtension(string name) { assert(0); }
+        void scanExtensions(bool onlyChanged = true) { assert(0); }
+
+        @property ICommandManager commandManager() { return _commandManager; }
+        @property ILog log() { return _log; }
+        @property ITextEditor currentTextEditor() { assert(0); }
+        @property void currentTextEditor(ITextEditor) { assert(0); }
+        @property IBufferView previousBuffer() { assert(0); }
+        @property IBufferView currentBuffer() { assert(0); }
+        @property void currentBuffer(IBufferView) { assert(0); }
+        @property string userDataDir() { return userDataDir; }
+        @property string executableDir() { assert(0); }
     }
 
     static class TestLog : ILog
@@ -176,12 +203,17 @@ unittest
         import deadcode.core.command;
         import deadcode.rpc;
         auto server = new RPCLoop;
-        server.listen(defaultPort);
+        server.listen(testPort);
         
         CommandManager commandManager = new CommandManager();
         registerCommandParameterMsgPackHandlers();
         static class MockCommandManager : ICommandManager
         {    
+            ICommand lookup(string commandName)
+            {
+                assert(0);
+            }
+            
             void add(ICommand command)
             {
                 writefln("MockCommandManager: add %s", command.name);
@@ -195,9 +227,10 @@ unittest
 
         server.onConnected.connectTo( (RPC rpc, bool incoming) {
             writeln("server: rpcClient connected");
-            rpc.publish(new TestApplication(), "0");
-            rpc.publish(new TestLog(), "1");
-            rpc.publish(commandManager, "2");
+            auto app = new TestApplication();
+            app._log = new TestLog();
+            app._commandManager = commandManager;
+            rpc.publish(app);
             server.stopListening();
         });
 
@@ -212,15 +245,20 @@ unittest
         auto log = context.resolve!ILog;
         log.info("Hello from client");
 
-        auto app = context.resolve!IApplication;
-        writefln("client: server.app.getUserDataDir() == '%s'", app.getUserDataDir());
+        //auto app = context.resolve!IApplication;
+        //writefln("client: server.app.getUserDataDir() == '%s'", app.getUserDataDir());
 
         auto commandManager = context.resolve!ICommandManager;
         commandManager.execute("test.log", [ CommandParameter("foo") ]);
 
         log.info("Hello again from client");
+    
+        import deadcode.rpc;
+        auto rpc = context.resolve!RPC;
+        rpc.kill();
     }
 
-    _dummy.runRpcClient(null, &initializeTestClient);
+    import std.conv;
+    _dummy.runRpcClient([ "app", "localhost", testPort.to!string ] , &initializeTestClient);
     writeln("client: end.");
 }

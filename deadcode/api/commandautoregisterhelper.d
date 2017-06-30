@@ -1,9 +1,9 @@
 module deadcode.api.commandautoregisterhelper;
 
-import deadcode.api.traits;
 import deadcode.api.commandautoregister : RegisterClassCommand, RegisterFunctionCommand;
-import deadcode.core.attr : isClass;
+import deadcode.core.attr : isClass, isAnyPublic;
 import deadcode.core.command : Command;
+import deadcode.core.traits;
 
 import std.meta : AliasSeq, Filter, staticMap, templateAnd;
 import std.traits : isImplicitlyConvertible, isSomeFunction;

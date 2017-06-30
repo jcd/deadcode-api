@@ -1,7 +1,12 @@
 module deadcode.api.api;
 
+// NOTE: Make sure to name interface method parameters or things will not compile.
+
 public import deadcode.core.commandparameter : CommandParameter, CommandParameterDefinition, CommandParameterDefinitions;
 public import deadcode.core.command : ICommand, ICommandManager;
+public import deadcode.core.log : LogLevel, ILog;
+
+enum deadcodeListenPort = 12345;
 
 /** Attribute to specify a shortcut for for a Command or command function
 
@@ -78,30 +83,50 @@ struct CommandMenuItem
     MenuItem menuItem;
 }
 
-interface IApplication 
-{
-    IBufferView previousBuffer();
-    void setLogFile(string path);
-    void bufferViewParamTest(IBufferView b);
-    void addCommand(ICommand c);
-    // void addMenuItem(string commandName, MenuItem menuItem);
-    // void addCommandShortcuts(string commandName, Shortcut[] shortcuts);
-    void onFileDropped(string path);
-    void quit();
-    string hello(string yourName);
-    ITextEditor getCurrentTextEditor();
-    IBufferView getCurrentBuffer();
-    void startExtension(string path);
-    void scheduleCommand(string commandName, string arg1);
-    string getUserDataDir();
-    string getExecutableDir();
-}
-
 interface IBufferView 
 {
     string name();
     void beginUndoGroup();
     void endUndoGroup();
+}
+
+interface IApplication 
+{
+    void logMessage(LogLevel level, string msg);
+    void setLogFile(string path);
+    void bufferViewParamTest(IBufferView b);
+    void addCommand(ICommand c);
+    string[] findCommands(string pattern);
+    void runCommand(string commandName);
+    void scheduleCommand(string commandName);
+
+    void buildExtension(string name);
+    void loadExtension(string name);
+    void unloadExtension(string name);
+    void scanExtensions(bool onlyChanged = true);
+
+    // IBufferView newBuffer();
+
+    // void addMenuItem(string commandName, MenuItem menuItem);
+    // void addCommandShortcuts(string commandName, Shortcut[] shortcuts);
+    void onFileDropped(string path);
+    void quit();
+    void startExtension(string path);
+
+    @property ICommandManager commandManager();
+    @property ILog log();
+    @property ITextEditor currentTextEditor();
+    // @property void currentTextEditor(ITextEditor e);
+    @property IBufferView previousBuffer();
+    @property IBufferView currentBuffer();
+    @property void currentBuffer(IBufferView b);
+    @property string userDataDir();
+    @property string executableDir();
+}
+
+interface IDirectoryChangeListener
+{
+    void handleChange(string[] filesAdded, string[] filesRemoved, string[] filesModified);
 }
 
 interface IRemoteCommandRegistrar 

@@ -9,6 +9,17 @@
     "importPaths": [ "." ],
 	"dependencies": {
 		"deadcode-rpc": ">=0.0.0",
-		"poodinis": "~>6.2.0",
-	}
+		"poodinis": "~>6.2.0"
+	},
+	"configurations" : [
+		{
+			"name" : "library"
+		},
+		{
+			"name" : "unittest",
+			"versions" : [ "TestingByTool" ],
+			"dependencies" : {
+			}
+		}
+	]
 }

@@ -19,6 +19,12 @@ public import std.variant;
 */
 template registerCommands(string Mod = __MODULE__)
 {
+    version (DeadcodeOutOfProcess)
+    {
+        import deadcode.api.rpcclient;
+        mixin rpcClient;
+    }
+
     import deadcode.api.commandautoregisterhelper;
 
     version (none)
@@ -34,10 +40,5 @@ template registerCommands(string Mod = __MODULE__)
             alias _commandFunctionsCTRegister = commandFunctionsCTRegister!(mixin(Mod));
             alias _commandClassesCTRegister = commandClassesCTRegister!(mixin(Mod));
         }
-    }
-    version (DeadcodeOutOfProcess)
-    {
-        import deadcode.api.rpcclient;
-        mixin rpcClient;
     }
 }

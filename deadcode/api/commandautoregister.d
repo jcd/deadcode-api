@@ -9,7 +9,7 @@ import deadcode.core.commandparameter : createParams, CommandCall, CommandParame
 import deadcode.core.log;
 
 import std.meta : AliasSeq, anySatisfy, Filter, Replace, staticIndexOf, staticMap;
-import std.traits : FieldNameTuple, isSomeFunction, Identity, ParameterIdentifierTuple, ParameterTypeTuple;
+import std.traits : FieldNameTuple, isSomeFunction, Identity, ParameterDefaults, ParameterIdentifierTuple, ParameterTypeTuple;
 
 import poodinis;
 
@@ -162,17 +162,36 @@ class ExtensionCommandWrap(alias AttributeHolder, Base) : Base, Autowireable
 
 	this()
 	{
-		enum getDefaultValue(U) = U.init;
-		 
-		alias p1 = Filter!(isNotType!InjectedTypes, ParameterTypeTuple!Func);
-		alias p2 = staticMap!(getDefaultValue, p1);
+        alias isInjectedType = isType!InjectedTypes;
+		template getDefaultValues(alias F)
+        {   
+            alias Types = ParameterTypeTuple!F;
+            alias DefaultValues = ParameterDefaults!F;
+            template Each(int Idx)
+            {
+                static if (Types.length == Idx)
+                    alias Each = AliasSeq!();
+                else static if (isInjectedType!(Types[Idx]))
+                    alias Each = Each!(Idx+1);
+                else static if (is (DefaultValues[Idx] == void))
+                    alias Each = AliasSeq!(Types[Idx].init, Each!(Idx+1));
+                else 
+                    alias Each = AliasSeq!(DefaultValues[Idx], Each!(Idx+1));
+            }
+            
+            alias getDefaultValues = Each!0;
+        }
+		
+        //alias p1 = Filter!(isNotType!InjectedTypes, ParameterTypeTuple!Func);
+        //alias p2 = staticMap!(getDefaultValue!Func, p1);
+        alias p2 = getDefaultValues!Func;
 
 		enum names = [ParameterIdentifierTuple!Func];
-		setCommandParameterDefinitions(createParams(names, p2));
+		setCommandParameterDefinitions(createParams(names[$-p2.length..$], p2));
 	}
 	
-	private IBufferView currentBuffer() { return resolveApplication().getCurrentBuffer(); }
-	private ITextEditor currentTextEditor() { return resolveApplication().getCurrentTextEditor(); }
+	private IBufferView currentBuffer() { return resolveApplication().currentBuffer; }
+	private ITextEditor currentTextEditor() { return resolveApplication().currentTextEditor; }
 
 	private auto call(alias F)(CommandParameter[] v)
 	{
@@ -297,6 +316,7 @@ ExtensionCommandInstance[] initCommands(shared DependencyContainer context)
             w.context = context;
             w.performAutowire();
             inst.command = cast(Command) o;
+            inst.command.onLoaded();
         }
         catch (Exception e)
         {
@@ -307,15 +327,14 @@ ExtensionCommandInstance[] initCommands(shared DependencyContainer context)
 	return result;
 }
 
-void finiCommands(CommandManager commandManager)
+void finiCommands(ExtensionCommandInstance[] cmds)
 {
-	ICommand[] commands = commandManager.commands.values;
 	Exception ex;
-	foreach (c; commands)
+	foreach (c; cmds)
 	{
 		try
 		{
-			c.onUnloaded();
+			c.command.onUnloaded();
 		}
 		catch (Exception e)
 		{
