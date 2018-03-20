@@ -3,9 +3,9 @@ module deadcode.api.commandautoregister;
 import core.thread;
 
 import deadcode.core.attr : hasAttribute, getAttributes, isType, isNotType;
-import deadcode.api.api : IApplication, IBufferView, ITextEditor, MenuItem, Shortcut;
-import deadcode.core.command : ICommand, Command, CommandManager, CompletionEntry, Hints;
-import deadcode.core.commandparameter : createParams, CommandCall, CommandParameter;
+import deadcode.api.api : IApplication, IBufferView, ITextEditor, IWindow, MenuItem, Shortcut;
+import deadcode.command.command : ICommand, Command, CommandManager, CompletionEntry, Hints;
+import deadcode.command.commandparameter : createParams, CommandCall, CommandParameter;
 import deadcode.core.log;
 
 import std.meta : AliasSeq, anySatisfy, Filter, Replace, staticIndexOf, staticMap;
@@ -96,8 +96,8 @@ class ExtensionCommandWrap(alias AttributeHolder, Base) : Base, Autowireable
 {
 	private shared(DependencyContainer) _context;
 
-	alias InjectedTypes = AliasSeq!(IApplication, ITextEditor, IBufferView, Fiber, ILog);
-	alias InjectedObjects = AliasSeq!(resolveApplication, currentTextEditor, currentBuffer, Fiber.getThis, resolveLog);
+	alias InjectedTypes = AliasSeq!(IApplication, IWindow, ITextEditor, IBufferView, Fiber, ILog);
+	alias InjectedObjects = AliasSeq!(resolveApplication, currentWindow, currentTextEditor, currentBuffer, Fiber.getThis, resolveLog);
 
 	static if ( isSomeFunction!AttributeHolder )
 		alias Func = AttributeHolder;
@@ -112,7 +112,7 @@ class ExtensionCommandWrap(alias AttributeHolder, Base) : Base, Autowireable
 
 	private ILog resolveLog()
 	{
-		return _context.resolve!ILog;
+		return resolveApplication().log;
 	}
 
 	private IApplication resolveApplication()
@@ -192,6 +192,7 @@ class ExtensionCommandWrap(alias AttributeHolder, Base) : Base, Autowireable
 	
 	private IBufferView currentBuffer() { return resolveApplication().currentBuffer; }
 	private ITextEditor currentTextEditor() { return resolveApplication().currentTextEditor; }
+	private IWindow currentWindow() { return resolveApplication().activeWindow; }
 
 	private auto call(alias F)(CommandParameter[] v)
 	{
@@ -217,7 +218,7 @@ class ExtensionCommandWrap(alias AttributeHolder, Base) : Base, Autowireable
         // Save current active buffer since current buffer may be changed by the command
         static if ( anySatisfy!(isType!(IBufferView, ITextEditor), ParameterTypeTuple!F) )
         {
-            auto bv = app.getCurrentBuffer();
+            auto bv = currentBuffer();
             bv.beginUndoGroup();
             scope (exit) bv.endUndoGroup();
         }
@@ -300,7 +301,9 @@ struct ExtensionCommandInstance
 */
 ExtensionCommandInstance[] initCommands(shared DependencyContainer context)
 {
-	ExtensionCommandInstance[] result;
+	import std.algorithm : partition, startsWith, SwapStrategy;
+
+    ExtensionCommandInstance[] result;
 	foreach (cmdInfo; g_WrappedCommands)
 	{
 		ExtensionCommandInstance inst;
@@ -324,6 +327,13 @@ ExtensionCommandInstance[] initCommands(shared DependencyContainer context)
         }
         result ~= inst;
 	}
+
+    // Make sure stop commands are first and start commands last.
+    // Because stop and start commands are executed at start/shutdown
+    // that will ensure that all other commands are present when these
+    // commands are executed.
+    result.partition!(a => a.command.name.startsWith("stop."), SwapStrategy.stable);
+    result.partition!(a => !a.command.name.startsWith("start."), SwapStrategy.stable);
 	return result;
 }
 

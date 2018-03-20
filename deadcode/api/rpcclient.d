@@ -1,7 +1,7 @@
 module deadcode.api.rpcclient;
 
-import deadcode.api : IApplication, CommandParameter, deadcodeListenPort;
-import deadcode.core.command : CommandManager;
+import deadcode.api : IApplication, IExtensionRegistrar, IExtension, CommandParameter, deadcodeListenPort;
+import deadcode.command: CommandManager, registerCommandParameterMsgPackHandlers;
 import poodinis : DependencyContainer, existingInstance;
 
 /**
@@ -44,7 +44,8 @@ class _dummy
     {
         import std.conv;
         import std.stdio;
-        import deadcode.core.command;
+		import std.uuid;
+        import deadcode.command.command;
         import deadcode.rpc;
 
         registerCommandParameterMsgPackHandlers();
@@ -52,14 +53,19 @@ class _dummy
         string ip = "127.0.0.1";
         ushort port = deadcodeListenPort;
         
+		UUID uuid;
         if (args.length > 1)
-            ip = args[1];
-        
+            uuid = parseUUID(args[1]);
+
         if (args.length > 2)
-            port = args[2].to!ushort;
+            ip = args[2];
+        
+        if (args.length > 3)
+            port = args[3].to!ushort;
 
         auto loop = new RPCLoop;
         auto context = new shared DependencyContainer();
+		bool running = true;
 
         loop.onConnected.connectTo( (RPC rpc, bool incoming) {
             
@@ -71,12 +77,33 @@ class _dummy
             auto app = rpc.createReference!IApplication();
             auto remoteLog = cast(RPCProxy!ILog)app.log;
             auto commandManager = cast(RPCProxy!ICommandManager)app.commandManager;
+			auto registrar = rpc.createReference!IExtensionRegistrar();
 
             context.register!(IApplication, typeof(app)).existingInstance(app);
             context.register!(ILog, typeof(remoteLog)).existingInstance(remoteLog);
             context.register!(ICommandManager, typeof(commandManager)).existingInstance(commandManager);
             context.register!RPC.existingInstance(rpc);
             
+			class Extension : IExtension
+			{
+				void stop()
+				{
+                    // remoteLog.info("Stopping extension %s", uuidString);
+					running = false;		
+				}
+
+				@property string uuidString()
+				{
+					return uuid.toString();
+				}
+			}
+
+			auto extension = new Extension();
+			
+			// Let the editor know about the identity of this extension
+			rpc.publish(extension);
+			registrar.registerLoadedExtension(uuid.toString(), extension);
+
             auto cmds = initCommands(context);
 
             int nextCommandID = 100;
@@ -93,7 +120,7 @@ class _dummy
                 }
                 else
                 {
-                    remoteLog.verbose("Register command in deadcode %s", c.command.name);
+                    // remoteLog.verbose("Register command in deadcode %s", c.command.name);
                     app.addCommand(c.command);
                     //auto service = rpc.publish!(ICommand)(c.command, c.command.name);
                     //commandManager.add(service);
@@ -129,7 +156,7 @@ class _dummy
         }
 
         
-        while (loop.select() != 0) {}
+        while (loop.select() != 0 && running) {}
 
         return 0;
     }
@@ -147,6 +174,7 @@ version (unittest)
 unittest
 {
     import std.concurrency;
+	import deadcode.command.command;
     import std.stdio;
 
     enum testPort = 17654;
@@ -158,7 +186,42 @@ unittest
         ILog _log;
         ICommandManager _commandManager;
 
-        void logMessage(LogLevel level, string message) { assert(0); }
+        void showErrorMessage(string msg)  { assert(0); }
+        void showMessageDialog(string msg) { assert(0); }
+        bool showOkCancelDialog(string msg, string okButtonText) { assert(0); }
+        bool showYesNoCancelDialog(string msg, string yesButtonText, string noButtonText) { assert(0); }
+
+        @property IWindow[] windows() { assert(0); }
+        @property IWindow activeWindow() { assert(0); }
+        @property void activeWindow(IWindow win) { assert(0); }
+        @property string[] extensionPaths() { assert(0); }
+        void addExtensionsPath(string p) { assert(0); }
+        void removeExtensionPath(string p) { assert(0); }
+        @property string clipboard() { assert(0); }
+        @property void clipboard(string c) { assert(0); }
+
+        @property string ver() { assert(0); }
+        @property string platform() { assert(0); }
+        @property string architecture() { assert(0); }
+		void prompt(string question, string defaultAnswer = "",  void delegate(bool,string) completedDlg = null, bool delegate(string) validationDlg = null, CompletionEntry[] delegate(string) getCompletionsDlg = null) 
+		{ 
+			writeln("prompt called");
+			auto s = defaultAnswer ~ " completed";
+			writeln("validation expecting false");
+			assert(!validationDlg("notvalid"));
+			writeln("validation expecting true");
+			assert(validationDlg(s));
+			writeln("getCompletions");
+			auto c = getCompletionsDlg(defaultAnswer);
+			writeln("got Completions", c);
+			assert(c.length == 2);
+			assert(c[1].data == s);
+			writeln("complete");
+			completedDlg(true, s);
+		}
+
+        void focusWindow() { assert(0); }
+		void logMessage(string area, LogLevel level, string msg) { assert(0); }
         void setLogFile(string path)  { assert(0); }
         void bufferViewParamTest(IBufferView b) { assert(0); }
         void addCommand(ICommand c) { _commandManager.add(c); }
@@ -179,6 +242,9 @@ unittest
         void unloadExtension(string name) { assert(0); }
         void scanExtensions(bool onlyChanged = true) { assert(0); }
 
+        IBufferView newBufferView() { assert(0); }
+        IBufferView openFile(string path) { assert(0); }
+
         @property ICommandManager commandManager() { return _commandManager; }
         @property ILog log() { return _log; }
         @property ITextEditor currentTextEditor() { assert(0); }
@@ -192,15 +258,20 @@ unittest
 
     static class TestLog : ILog
     {
-        void log(LogLevel level, string message)
+        void log(string area, LogLevel level, string message)
         {
-            writeln("server: ", level, " ", message);
+            writeln("server: ", area, " ", level, " ", message);
+        }
+        
+        @property 
+        {
+            string path() { assert(0); } 
+            void path(string p) { assert(0); }
         }
     }
 
     static void runServer()
     {
-        import deadcode.core.command;
         import deadcode.rpc;
         auto server = new RPCLoop;
         server.listen(testPort);
@@ -223,7 +294,17 @@ unittest
             {
                 writefln("MockCommandManager: execute %s %s", commandName, params.length);
             }
+
+			bool exists(string cmd) { assert(0); }
         }
+
+		static class MockExtensionRegistrar : IExtensionRegistrar
+		{
+			void registerLoadedExtension(string uuid, IExtension extension)
+			{
+                writefln("MockExtensionRegistrar: Got %s %s", uuid);
+			}
+		}
 
         server.onConnected.connectTo( (RPC rpc, bool incoming) {
             writeln("server: rpcClient connected");
@@ -231,6 +312,8 @@ unittest
             app._log = new TestLog();
             app._commandManager = commandManager;
             rpc.publish(app);
+			auto r = new MockExtensionRegistrar();
+			rpc.publish(r);
             server.stopListening();
         });
 
@@ -252,7 +335,20 @@ unittest
         commandManager.execute("test.log", [ CommandParameter("foo") ]);
 
         log.info("Hello again from client");
-    
+
+        auto app = context.resolve!IApplication;
+		auto defAnswer = "My Answer";
+		auto expectedString = defAnswer ~ " completed";
+		bool done = false;
+		app.prompt("My Question", defAnswer, 
+				   (bool succ, string a) { writeln("Completed with ", a, " ", succ); done = true; },
+				   (string a) { writeln("validation callback"); return a == expectedString; },
+				   (string a) { writeln("getCompletions callback"); return [ CompletionEntry("aa", "aa"), CompletionEntry(expectedString, expectedString) ]; }
+				   );
+
+		while (!done) 
+		{}
+
         import deadcode.rpc;
         auto rpc = context.resolve!RPC;
         rpc.kill();

@@ -6,7 +6,7 @@ version (unittest)
 {
     mixin registerCommands;
     import std.stdio;
-    import deadcode.core.command : Command;
+    import deadcode.command.command : Command;
 
     void testFunctionCmd()
     {

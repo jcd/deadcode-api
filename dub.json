@@ -7,10 +7,12 @@
     "targetType": "library",
     "sourcePaths": [ "." ],
     "importPaths": [ "." ],
-	"dependencies": {
-		"deadcode-rpc": ">=0.0.0",
-		"poodinis": "~>6.2.0"
-	},
+  "dependencies": {
+    "deadcode-rpc": ">=0.0.0",
+    "deadcode-command": ">=0.0.0",
+    "deadcode-edit": ">=0.0.0",
+    "poodinis": "~>6.2.0"
+  },
 	"configurations" : [
 		{
 			"name" : "library"
