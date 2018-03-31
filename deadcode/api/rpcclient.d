@@ -302,7 +302,7 @@ unittest
 		{
 			void registerLoadedExtension(string uuid, IExtension extension)
 			{
-                writefln("MockExtensionRegistrar: Got %s %s", uuid);
+                writefln("MockExtensionRegistrar: Got %s", uuid);
 			}
 		}
 
@@ -355,6 +355,8 @@ unittest
     }
 
     import std.conv;
-    _dummy.runRpcClient([ "app", "localhost", testPort.to!string ] , &initializeTestClient);
+    import std.uuid;
+    auto uuid = UUID();
+    _dummy.runRpcClient(["app.exe", uuid.toString(), "localhost", testPort.to!string ] , &initializeTestClient);
     writeln("client: end.");
 }
