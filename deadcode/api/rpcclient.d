@@ -112,10 +112,12 @@ class _dummy
             {
                 if (c.initException !is null)
                 {
+                    // next-line-coverage-off
                     remoteLog.error(c.initException.toString());
                 }
                 else if (c.command is null)
                 {
+                    // next-line-coverage-off
                     remoteLog.error("Couldn't instantiate command %s",c.typeInfo.toString());
                 }
                 else
@@ -150,9 +152,11 @@ class _dummy
             loop.connect(ip, port);
         catch (SocketOSException e)
         {
+            // coverage-off
             writeln("Error connecting to editor:");
             writeln(e);
             return 2;
+            // coverage-on
         }
 
         
@@ -186,6 +190,7 @@ unittest
         ILog _log;
         ICommandManager _commandManager;
 
+        // coverage-off
         void showErrorMessage(string msg)  { assert(0); }
         void showMessageDialog(string msg) { assert(0); }
         bool showOkCancelDialog(string msg, string okButtonText) { assert(0); }
@@ -203,6 +208,8 @@ unittest
         @property string ver() { assert(0); }
         @property string platform() { assert(0); }
         @property string architecture() { assert(0); }
+        // coverage-on
+
 		void prompt(string question, string defaultAnswer = "",  void delegate(bool,string) completedDlg = null, bool delegate(string) validationDlg = null, CompletionEntry[] delegate(string) getCompletionsDlg = null) 
 		{ 
 			writeln("prompt called");
@@ -220,6 +227,7 @@ unittest
 			completedDlg(true, s);
 		}
 
+        // coverage-off
         void focusWindow() { assert(0); }
 		void logMessage(string area, LogLevel level, string msg) { assert(0); }
         void setLogFile(string path)  { assert(0); }
@@ -254,6 +262,7 @@ unittest
         @property void currentBuffer(IBufferView) { assert(0); }
         @property string userDataDir() { return userDataDir; }
         @property string executableDir() { assert(0); }
+        // coverage-on
     }
 
     static class TestLog : ILog
@@ -265,8 +274,10 @@ unittest
         
         @property 
         {
+            // coverage-off
             string path() { assert(0); } 
             void path(string p) { assert(0); }
+            // coverage-on
         }
     }
 
@@ -278,25 +289,6 @@ unittest
         
         CommandManager commandManager = new CommandManager();
         registerCommandParameterMsgPackHandlers();
-        static class MockCommandManager : ICommandManager
-        {    
-            ICommand lookup(string commandName)
-            {
-                assert(0);
-            }
-            
-            void add(ICommand command)
-            {
-                writefln("MockCommandManager: add %s", command.name);
-            }
-
-            void execute(string commandName, CommandParameter[] params)
-            {
-                writefln("MockCommandManager: execute %s %s", commandName, params.length);
-            }
-
-			bool exists(string cmd) { assert(0); }
-        }
 
 		static class MockExtensionRegistrar : IExtensionRegistrar
 		{
