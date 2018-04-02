@@ -7,9 +7,10 @@ import deadcode.api.api : IApplication, IBufferView, ITextEditor, IWindow, MenuI
 import deadcode.command.command : ICommand, Command, CommandManager, CompletionEntry, Hints;
 import deadcode.command.commandparameter : createParams, CommandCall, CommandParameter;
 import deadcode.core.log;
+import deadcode.core.traits : Identity;
 
 import std.meta : AliasSeq, anySatisfy, Filter, Replace, staticIndexOf, staticMap;
-import std.traits : FieldNameTuple, isSomeFunction, Identity, ParameterDefaults, ParameterIdentifierTuple, ParameterTypeTuple;
+import std.traits : FieldNameTuple, isSomeFunction, ParameterDefaults, ParameterIdentifierTuple, ParameterTypeTuple;
 
 import poodinis;
 
@@ -86,7 +87,7 @@ interface Autowireable
 		void context(shared(DependencyContainer) context);
 		shared(DependencyContainer) context();
 	}
-	void performAutowire();
+	protected void performAutowire();
 }
 
 // Wrapper for a function or a class derived from Command where it will
@@ -152,11 +153,9 @@ class ExtensionCommandWrap(alias AttributeHolder, Base) : Base, Autowireable
 		}
 	}
 
-	void performAutowire()
+	protected void performAutowire()
 	{
 		alias WrappedType = ExtensionCommandWrap!(AttributeHolder, Base);
-		if (context is null)
-			throw new Exception("Cannot autowire command when context is null");
 		autowire!WrappedType(context, this);
 	}
 
@@ -225,6 +224,7 @@ class ExtensionCommandWrap(alias AttributeHolder, Base) : Base, Autowireable
 
 		alias parameterType(int idx) = ParameterTypeTuple!F[$-nonInjectedArgsCount+idx];
 
+		// coverage-off: This is ctfe
 		static string _setupArgs(int count)
 		{
 			import std.conv;
@@ -237,6 +237,7 @@ class ExtensionCommandWrap(alias AttributeHolder, Base) : Base, Autowireable
 			}
 			return res;
 		}
+		// coverage-on
 
 		assert(v.length >= nonInjectedArgsCount);
 
@@ -303,6 +304,9 @@ ExtensionCommandInstance[] initCommands(shared DependencyContainer context)
 {
 	import std.algorithm : partition, startsWith, SwapStrategy;
 
+	if (context is null) // next-line-coverage-off
+		throw new Exception("Cannot autowire command when context is null");
+
     ExtensionCommandInstance[] result;
 	foreach (cmdInfo; g_WrappedCommands)
 	{
@@ -323,6 +327,7 @@ ExtensionCommandInstance[] initCommands(shared DependencyContainer context)
         }
         catch (Exception e)
         {
+        	// next-line-coverage-off: case not interesting to test
             inst.initException = e;
         }
         result ~= inst;
@@ -348,9 +353,11 @@ void finiCommands(ExtensionCommandInstance[] cmds)
 		}
 		catch (Exception e)
 		{
+			// next-line-coverage-off: case not interesting to test
 			ex = e;
 		}
 	}
-	if (ex !is null)
+
+	if (ex !is null) // next-line-coverage-off: case not interesting to test
 		throw ex;
 }

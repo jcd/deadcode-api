@@ -100,6 +100,8 @@ class _dummy
 
 			auto extension = new Extension();
 			
+            context.register!(IExtension, typeof(extension)).existingInstance(extension);
+
 			// Let the editor know about the identity of this extension
 			rpc.publish(extension);
 			registrar.registerLoadedExtension(uuid.toString(), extension);
@@ -172,6 +174,7 @@ version (unittest)
     import deadcode.core.log;
     mixin registerCommands;
     void testLogCommand(ILog log, string a) { import std.stdio; writeln("client: local test.logCommand('" ~ a ~ "')"); }
+    void testCoverageCommand(IBufferView bv, ITextEditor te, IWindow w) {};
 }
 
 ///
@@ -189,6 +192,7 @@ unittest
     {
         ILog _log;
         ICommandManager _commandManager;
+        IBufferView _bufferView;
 
         // coverage-off
         void showErrorMessage(string msg)  { assert(0); }
@@ -197,7 +201,7 @@ unittest
         bool showYesNoCancelDialog(string msg, string yesButtonText, string noButtonText) { assert(0); }
 
         @property IWindow[] windows() { assert(0); }
-        @property IWindow activeWindow() { assert(0); }
+        @property IWindow activeWindow() { return null; }
         @property void activeWindow(IWindow win) { assert(0); }
         @property string[] extensionPaths() { assert(0); }
         void addExtensionsPath(string p) { assert(0); }
@@ -255,10 +259,10 @@ unittest
 
         @property ICommandManager commandManager() { return _commandManager; }
         @property ILog log() { return _log; }
-        @property ITextEditor currentTextEditor() { assert(0); }
+        @property ITextEditor currentTextEditor() { return null; }
         @property void currentTextEditor(ITextEditor) { assert(0); }
         @property IBufferView previousBuffer() { assert(0); }
-        @property IBufferView currentBuffer() { assert(0); }
+        @property IBufferView currentBuffer() { return _bufferView; }
         @property void currentBuffer(IBufferView) { assert(0); }
         @property string userDataDir() { return userDataDir; }
         @property string executableDir() { assert(0); }
@@ -284,6 +288,8 @@ unittest
     static void runServer()
     {
         import deadcode.rpc;
+        import std.typecons;
+
         auto server = new RPCLoop;
         server.listen(testPort);
         
@@ -303,6 +309,7 @@ unittest
             auto app = new TestApplication();
             app._log = new TestLog();
             app._commandManager = commandManager;
+            app._bufferView = new BlackHole!IBufferView();
             rpc.publish(app);
 			auto r = new MockExtensionRegistrar();
 			rpc.publish(r);
@@ -313,7 +320,7 @@ unittest
 
         writeln("server: end.");
     }
-    spawn(&runServer);
+    spawn(&runServer);     
 
     static void initializeTestClient(shared DependencyContainer context)
     {
@@ -325,6 +332,7 @@ unittest
 
         auto commandManager = context.resolve!ICommandManager;
         commandManager.execute("test.log", [ CommandParameter("foo") ]);
+        commandManager.execute("test.coverage", null);
 
         log.info("Hello again from client");
 
@@ -341,9 +349,15 @@ unittest
 		while (!done) 
 		{}
 
+        auto ext = context.resolve!IExtension;
+
+        writeln("client uuid:", ext.uuidString);
+
         import deadcode.rpc;
         auto rpc = context.resolve!RPC;
         rpc.kill();
+
+        ext.stop();
     }
 
     import std.conv;
